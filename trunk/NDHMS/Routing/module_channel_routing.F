@@ -62,6 +62,7 @@ end function MUSKING
 !   SUBROUTINE LEVELPOOL
 ! ------------------------------------------------
 
+!subroutine LEVELPOOL(ln,qi0,qi1,qo1,ql,dt,H,ar,we,maxh,wc,wl,oe,oc,oa)
 subroutine LEVELPOOL(ln,qi0,qi1,qo1,ql,dt,H,ar,we,maxh,wc,wl,oe,oc,oa)
 
 !! ----------------------------  argument variables
@@ -91,8 +92,8 @@ real    :: Htmp                ! Temporary assign of incoming lake el. (m)
 real :: sap                    ! local surface area values
 real :: discharge              ! storage discharge m^3/s
 real :: tmp1, tmp2
-real :: dh, dh1, dh2, dh3      ! height function and 3 order RK
-real :: It, Itdt_3, Itdt_2_3
+real :: dh, dh1, dh2, dh3      ! Depth in weir, and height function for 3 order RK
+real :: It, Itdt_3, Itdt_2_3   ! inflow hydrographs
 real :: maxWeirDepth           !maximum capacity of weir
 !! ----------------------------  subroutine body: from chow, mad mays. pg. 252
 !! -- determine from inflow hydrograph
@@ -114,8 +115,8 @@ if (LAKE_OPT.eq.1) then     ! If-block for simple pass through scheme....
 else if (LAKE_OPT.eq.2) then   ! If-block for Chow et al level pool scheme
    
    It = qi0
-   Itdt_3   = (qi0 + (qi1 + ql))/3
-   Itdt_2_3 = (qi0 + (qi1 + ql))/3 + Itdt_3
+   Itdt_3   = qi0 + ((qi1 - qi0) * 0.33)
+   Itdt_2_3 = qi0 + ((qi1 - qi0) * 0.67)
    maxWeirDepth =  maxh - we   
    
    !-- determine Q(dh) from elevation-discharge relationship
@@ -125,13 +126,13 @@ else if (LAKE_OPT.eq.2) then   ! If-block for Chow et al level pool scheme
       dh = maxWeirDepth 
    endif
    
-   if (dh .gt. 0.0 ) then              !! orifice and overtop discharge
+   if (dh .gt. 0.0 ) then     !! orifice and overtop discharge
       tmp1 = oc * oa * sqrt(2 * 9.81 * ( H - oe ) )
       tmp2 = wc * wl * (dh ** 3./2.)
       discharge = tmp1 + tmp2
       
       if (H .gt. 0.0) then
-         sap = (ar * 1.0E6 ) * (1 + (H - we) / H)
+         sap = ar * 1.0E6   !assume vertically walled reservoir
       else
          sap  = 0.0
       endif
@@ -158,18 +159,18 @@ else if (LAKE_OPT.eq.2) then   ! If-block for Chow et al level pool scheme
    endif
    
    if (dh .gt. 0.0 ) then              !! orifice and overtop discharge
-      tmp1 = oc * oa * sqrt(2 * 9.81 * ( H - oe ) )
+      tmp1 = oc * oa * sqrt(2 * 9.81 * ( (H+dh1/3) - oe ) )
       tmp2 = wc * wl * (dh ** 3./2.) 
       discharge = tmp1 + tmp2
       
-      if (H .gt. 0.0) then 
-         sap = (ar * 1.0E6 ) * (1 + (H - we) / H)
+      if ((H+dh1/3) .gt. 0.0) then 
+         sap = (ar * 1.0E6 ) !* (1 + ( (H+dh1/3) - we) / H)
       else
          sap  = 0.0
       endif
       
-   else if ( H .gt. oe ) then     !! only orifice flow,not full
-      discharge = oc * oa * sqrt(2 * 9.81 * ( H - oe ) )
+   else if ( (H+dh1/3) .gt. oe ) then     !! only orifice flow,not full
+      discharge = oc * oa * sqrt(2 * 9.81 * ( (H+dh1/3) - oe ) )
       sap = ar * 1.0E6
    else
       discharge = 0.0
@@ -190,18 +191,18 @@ else if (LAKE_OPT.eq.2) then   ! If-block for Chow et al level pool scheme
    endif
    
    if (dh .gt. 0.0 ) then              !! orifice and overtop discharge
-      tmp1 = oc * oa * sqrt(2 * 9.81 * ( H - oe ) )
+      tmp1 = oc * oa * sqrt(2 * 9.81 * ( (H+dh2*0.667) - oe ) )
       tmp2 = wc * wl * (dh ** 3./2.) 
       discharge = tmp1 + tmp2
       
-      if (H .gt. 0.0) then
-         sap = (ar * 1.0E6 ) * (1 + (H - we) / H)
+      if ((H+dh2*0.667) .gt. 0.0) then
+         sap = (ar * 1.0E6 ) !* (1 + ( (H+dh2*0.667) - we) / H)
       else
          sap = 0.0
       endif
       
-   else if ( H .gt. oe ) then     !! only orifice flow,not full
-      discharge = oc * oa * sqrt(2 * 9.81 * ( H - oe ) )
+   else if ( (H+dh2*0.667) .gt. oe ) then     !! only orifice flow,not full
+      discharge = oc * oa * sqrt(2 * 9.81 * ( (H+dh2*0.667) - oe ) )
       sap = ar * 1.0E6
    else
       discharge = 0.0
@@ -229,7 +230,7 @@ else if (LAKE_OPT.eq.2) then   ! If-block for Chow et al level pool scheme
       discharge = tmp1 + tmp2
       
       if (H .gt. 0.0) then 
-         sap = (ar * 1.0E6 ) * (1 + (H - we) / H)
+         sap = (ar * 1.0E6 ) !* (1 + (H - we) / H)
       else
          sap = 0.0
       endif
