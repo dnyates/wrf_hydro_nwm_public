@@ -28,6 +28,7 @@ SUBROUTINE RT_PARM(IX,JY,IXRT,JXRT,VEGTYP,RETDP,OVRGH,  &
     use module_mpp_land, only: left_id,down_id,right_id,&
         up_id,mpp_land_com_real,MPP_LAND_UB_COM, &
         MPP_LAND_LR_COM,mpp_land_com_integer
+    use module_RT_data, only:rt_domain
 #endif
 
     IMPLICIT NONE
@@ -36,9 +37,9 @@ SUBROUTINE RT_PARM(IX,JY,IXRT,JXRT,VEGTYP,RETDP,OVRGH,  &
 
     INTEGER, INTENT(IN) :: IX,JY,IXRT,JXRT,AGGFACTR
 
-    INTEGER, INTENT(IN), DIMENSION(IX,JY)	:: VEGTYP
-    REAL, INTENT(OUT), DIMENSION(IXRT,JXRT)	:: RETDP
-    REAL, INTENT(OUT), DIMENSION(IXRT,JXRT)	:: OVRGH
+    INTEGER, INTENT(IN), DIMENSION(IX,JY)   :: VEGTYP
+    REAL, INTENT(OUT), DIMENSION(IXRT,JXRT) :: RETDP
+    REAL, INTENT(OUT), DIMENSION(IXRT,JXRT) :: OVRGH
 
 
     !DJG Local Variables
@@ -105,68 +106,122 @@ END SUBROUTINE RT_PARM
 
 
 !DJG ----------------------------------------------------------------
-SUBROUTINE GETMAX8DIR(IXX0,JYY0,I,J,H,RETENT_DEP,sox,tmp_gsize,max,XX,YY)
-    implicit none
-    INTEGER:: IXX0,JYY0,IXX8,JYY8, XX, YY
-    INTEGER, INTENT(IN) :: I,J
+ SUBROUTINE GETMAX8DIR(IXX0,JYY0,I,J,H,RETENT_DEP,sox,tmp_gsize,maxslp,XX,YY,idx, &
+            ELRT,CH_NETLNK,HLINK,ChSSlp,Bw,NLINKS)
+#ifdef MPP_LAND
+    use module_mpp_land, only: left_id,down_id,right_id,&
+        up_id,mpp_land_com_real,MPP_LAND_UB_COM, &
+        MPP_LAND_LR_COM,mpp_land_com_integer
+    use module_RT_data, only:rt_domain
+#endif
 
-    REAL,INTENT(IN) :: H(XX,YY),RETENT_DEP(XX,YY),sox(XX,YY,8),tmp_gsize(9)
-    REAL  max
+    implicit none
+    INTEGER                             :: IXX8,JYY8, XX, YY
+    INTEGER, INTENT(IN)                 :: I,J
+    REAL,INTENT(IN),DIMENSION(XX,YY)    :: H,RETENT_DEP,ELRT !H and retendep (mm), elrt (m)
+    REAL,INTENT(IN)                     :: sox(XX,YY,8),tmp_gsize(9)
+    REAL, INTENT(INOUT)                 :: maxslp
+    INTEGER, INTENT (INOUT)             :: IXX0,JYY0,idx
+    REAL, INTENT(IN), DIMENSION(NLINKS) :: HLINK,Bw,ChSSlp
+    INTEGER, INTENT(IN)                 :: NLINKS
+    INTEGER,INTENT(IN),DIMENSION(XX,YY) :: CH_NETLNK
+
     IXX0 = -1
-    max = 0
+    maxslp = 0.
+    idx=0
+
     if (h(I,J).LE.retent_dep(I,J)) return
 
     IXX8 = I
     JYY8 = J+1
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,1),IXX0,JYY0,max,tmp_gsize(1),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,1),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(1),1,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
 
     IXX8 = I+1
     JYY8 = J+1
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,2),IXX0,JYY0,max,tmp_gsize(2),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,2),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(2),2,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
 
     IXX8 = I+1
     JYY8 = J
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,3),IXX0,JYY0,max,tmp_gsize(3),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,3),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(3),3,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
 
     IXX8 = I+1
     JYY8 = J-1
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,4),IXX0,JYY0,max,tmp_gsize(4),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,4),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(4),4,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
 
     IXX8 = I
     JYY8 = J-1
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,5),IXX0,JYY0,max,tmp_gsize(5),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,5),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(5),5,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
 
     IXX8 = I-1
     JYY8 = J-1
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,6),IXX0,JYY0,max,tmp_gsize(6),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,6),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(6),6,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
 
     IXX8 = I-1
     JYY8 = J
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,7),IXX0,JYY0,max,tmp_gsize(7),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,7),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(7),7,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
 
     IXX8 = I-1
     JYY8 = J+1
-    call GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox(:,:,8),IXX0,JYY0,max,tmp_gsize(8),XX,YY)
+
+    call GET8DIR(H(I,J),H(IXX8,JYY8),sox(I,J,8),IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize(8),8,idx,elrt(I,J), &
+         elrt(IXX8,JYY8),ch_netlnk(IXX8,JYY8),hlink(ch_netlnk(IXX8,JYY8)),ChSSlp(ch_netlnk(IXX8,JYY8)),Bw(ch_netlnk(IXX8,JYY8)))
+
     RETURN
 END SUBROUTINE GETMAX8DIR
 
-SUBROUTINE GET8DIR(IXX8,JYY8,I,J,H,RETENT_DEP,sox   &
-        ,IXX0,JYY0,max,tmp_gsize,XX,YY)
-    implicit none
-    integer,INTENT(INOUT) ::IXX0,JYY0
-    INTEGER, INTENT(IN) :: I,J,IXX8,JYY8,XX,YY
-    REAL,INTENT(IN) :: H(XX,YY),RETENT_DEP(XX,YY),sox(XX,YY)
-    REAL, INTENT(INOUT) ::max
-    real, INTENT(IN) :: tmp_gsize
-    real :: sfx
+SUBROUTINE GET8DIR(H1,H2,sox,IXX8,JYY8,IXX0,JYY0,maxslp,tmp_gsize,idxin,idx, &
+             el1,el2,ch,hlnk,CSlp,Bwdth)
 
-    sfx = sox(i,j)-(h(IXX8,JYY8)-h(i,j))*0.001/tmp_gsize
-    if(sfx .le. 0 ) return
-    if(max < sfx ) then
+    implicit none
+    integer,INTENT(INOUT)  :: IXX0,JYY0,idx
+    REAL,INTENT(IN)        :: H1,H2,el1,el2,sox,tmp_gsize !h1 and h2 are mm, el1 and el2 are m
+    INTEGER,INTENT(IN)     :: ch,IXX8,JYY8,idxin  ! channel network id
+    REAL,INTENT(IN)        :: hlnk,CSlp,Bwdth
+    REAL, INTENT(INOUT)    :: maxslp
+    real :: sfx,bfd,wse,wss !bank full depth, water surface elev, waer surface slope
+
+    if(ch .gt. 0) then
+      bfd = (Bwdth*2.0 - Bwdth)/(2.0 * 1./CSlp) !units are meters
+      wse =  el2 + max(hlnk-bfd,0.0) !wse at channel grid !units are meters
+      wss = (el1 - wse)/tmp_gsize !water surface slope !units are meters
+      sfx = wss - ((wse*1000. + H2) - (el1*1000. + H1)) * (0.001/tmp_gsize) !units are mm
+
+      if(sfx .gt. 0.2) then 
+       write(6,*) 'SFX chan',bfd,(wse*1000.+H2),(el1*1000. + H1), sfx
+      endif
+
+    else
+      sfx = sox - (H2-H1) * (0.001/tmp_gsize) !tmp_gsize is in (m) so multiply by 1000 to conver to mm
+
+!     if(sfx .gt. 0.2) then 
+!      write(6,*) 'SFX NON CHAN',H2,H1,sfx
+!     endif
+
+    endif
+
+    if(sfx .le. 0. ) return
+    if(maxslp < sfx ) then
         IXX0 = IXX8
         JYY0 = JYY8
-        max = sfx
+        maxslp = sfx
+        idx = idxin
     end if
+    
+    RETURN
 
 END SUBROUTINE GET8DIR
 
@@ -1322,7 +1377,13 @@ subroutine OverlandRouting_drv(did)
             rt_domain(did)%ixrt, &
             rt_domain(did)%jxrt, &
             rt_domain(did)%q_sfcflx_x, &
-            rt_domain(did)%q_sfcflx_y &
+            rt_domain(did)%q_sfcflx_y, &
+            rt_domain(did)%elrt, &
+            rt_domain(did)%ch_netlnk, &
+            rt_domain(did)%hlink,  &
+            rt_domain(did)%ChSSlp,  &
+            rt_domain(did)%Bw,  &
+            rt_domain(did)%nlinks  &
             )
         ! ADCHANGE: If overland routing is called, INFXSUBRT is moved to SFCHEADSUBRT, so
         !           zeroing out just in case

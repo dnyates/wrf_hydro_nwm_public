@@ -62,6 +62,7 @@
           logical :: compound_channel
           integer ::frxst_pts_out            ! ASCII point timeseries output at user specified points
           integer ::CHRTOUT_DOMAIN           ! Netcdf point timeseries output at all channel points
+          integer ::CHRTOUT_IDVSTN           ! Netcdf point timeseries output at all channel points in IDV station format
           integer ::CHRTOUT_GRID                ! Netcdf grid of channel streamflow values
           integer ::CHANOBS_DOMAIN             ! NetCDF point timeseries of output at forecast/gage points
           integer ::LSMOUT_DOMAIN              ! Netcdf grid of variables passed between LSM and routing components

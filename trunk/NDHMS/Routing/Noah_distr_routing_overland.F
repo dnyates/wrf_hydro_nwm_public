@@ -16,22 +16,34 @@ subroutine OverlandRouting( &
     DTRT_TER, &
     rt_option, &
     ixrt, &       ! routing grid x size
-    jxrt, &      ! routing grid y size
-    q_sfcflx_x, &! accumulated x flux
-    q_sfcflx_y  &! accumulated y flux
+    jxrt, &       ! routing grid y size
+    q_sfcflx_x, & ! accumulated x flux
+    q_sfcflx_y, & ! accumulated y flux
+    elrt, &       ! terrain elevation
+    ch_netlnk, &  ! channe network index
+    hlink, &      ! channel water depth
+    ChSSlp, &     ! channel side slop
+    Bw, &         !channel bottom width
+    nlinks &      ! number of channel nodes
     )
 #ifdef MPP_LAND
     use module_mpp_land, only:  mpp_land_max_int1,  sum_real1, my_id, io_id, numprocs
     use overland_data
+    use module_RT_data, only: rt_domain
+ 
 #endif
     implicit none
 
-    type (overland_struct), intent(inout) :: ovrt_data
-    REAL, INTENT(IN) :: DT, DTRT_TER
-    integer, INTENT(IN) :: ixrt, jxrt, rt_option
-    !REAL, INTENT(out), DIMENSION(IXRT,JXRT)   :: SFCHEADSUBRT  ! moved into overland_data%control
-    real, intent(inout) :: q_sfcflx_x,q_sfcflx_y
-
+    type (overland_struct), intent(inout)      :: ovrt_data
+    REAL, INTENT(IN)                           :: DT, DTRT_TER
+    integer, INTENT(IN)                        :: ixrt, jxrt, rt_option
+    REAL, INTENT(in), DIMENSION(IXRT,JXRT)     :: elrt
+    INTEGER, INTENT(in), DIMENSION(IXRT,JXRT)  :: ch_netlnk
+    real, intent(inout), DIMENSION(IXRT,JXRT)  :: q_sfcflx_x,q_sfcflx_y
+    INTEGER, INTENT(in)                        :: NLINKS
+    REAL, INTENT(in), DIMENSION(NLINKS)        :: Bw,ChSSlp
+    REAL, INTENT(inout), DIMENSION(NLINKS)     :: HLINK
+    
     ! REMOVED VARIABLES
     !INTEGER, INTENT(INOUT), DIMENSION(IXRT,JXRT) :: LAKE_MSKRT
 
@@ -114,18 +126,26 @@ subroutine OverlandRouting( &
     !DJG.7.20.2007 - Global check for infxs>retdep & skip if not...(IF)
 
     if (sfcrt_flag.eq.1) then  !If/then for sfc_rt check...
+
 #ifdef HYDRO_D
-        write(6,*) "calling OV_RTNG "
+        write(6,*) "calling OV_RTNG ", elrt(1,1), ch_netlnk(1,1)
 #endif
-        CALL OV_RTNG(           &
-            ovrt_data, &
-            DT,                   &
-            DTRT_TER,             &
-            IXRT,                 &
-            JXRT,                 &
-            rt_option,            &
-            q_sfcflx_x,           &
-            q_sfcflx_y)
+
+        CALL OV_RTNG(     &
+            ovrt_data,    &
+            DT,           &
+            DTRT_TER,     &
+            IXRT,         &
+            JXRT,         &
+            rt_option,    &
+            q_sfcflx_x,   &
+            q_sfcflx_y,   &
+            elrt,         & 
+            ch_netlnk,    & 
+            nlinks,       & 
+            Bw,           & 
+            ChSSlp,       &  
+            hlink         & )
     else
         ovrt_data%control%surface_water_head_routing = ovrt_data%control%infiltration_excess
 #ifdef HYDRO_D
@@ -202,15 +222,21 @@ end subroutine OverlandRouting
     !  SOYRT,dist,LAKE_MSKRT,LAKE_INFLORT,LAKE_INFLOTRT,  &
     !  SO8RT,SO8RT_D,rt_option,q_sfcflx_x,q_sfcflx_y)
 
-subroutine ov_rtng( &
-        ovrt_data, &
-        DT, &
-        DTRT_TER, &
-        IXRT, &
-        JXRT, &
-        rt_option, &
+subroutine OV_RTNG( &
+        ovrt_data,  &
+        DT,         &
+        DTRT_TER,   &
+        IXRT,       &
+        JXRT,       &
+        rt_option,  &
         q_sfcflx_x, &
-        q_sfcflx_y &
+        q_sfcflx_y, &
+        elrt,       &
+        ch_netlnk,  &
+        nlinks,     &
+        Bw,         &
+        ChSSlp,     &
+        hlink       &
         )
 
     !yyww
@@ -218,18 +244,23 @@ subroutine ov_rtng( &
     use module_mpp_land, only: left_id,down_id,right_id, &
         up_id,mpp_land_com_real, my_id, &
         mpp_land_sync
+        use module_RT_data, only:rt_domain
 #endif
     use overland_data
     IMPLICIT NONE
 
     !DJG --------DECLARATIONS----------------------------
 
-    type (overland_struct), intent(inout) :: ovrt_data
-    INTEGER, INTENT(IN)			:: IXRT,JXRT
-    REAL, INTENT(IN)			:: DT,DTRT_TER
-    integer, intent(in) :: rt_option
+    type (overland_struct), intent(inout)     :: ovrt_data
+    INTEGER, INTENT(IN)                       :: IXRT,JXRT
+    REAL, INTENT(IN)                          :: DT,DTRT_TER
+    integer, intent(in)                       :: rt_option,nlinks
+    REAL, INTENT(IN), DIMENSION(NLINKS)       :: Bw,ChSSlp
+    REAL, INTENT(INOUT), DIMENSION(NLINKS)    :: HLINK
+    INTEGER, INTENT(IN), DIMENSION(IXRT,JXRT) :: CH_NETLNK 
+    REAL, INTENT(IN), DIMENSION(IXRT,JXRT)    :: ELRT
+    REAL, INTENT(INOUT), DIMENSION(IXRT,JXRT) :: q_sfcflx_x,q_sfcflx_y
 
-    !INTEGER, INTENT(IN), DIMENSION(IXRT,JXRT) :: CH_NETRT
     !INTEGER, INTENT(IN), DIMENSION(IXRT,JXRT) :: LAKE_MSKRT
     !REAL, INTENT(IN), DIMENSION(IXRT,JXRT)	:: INFXSUBRT
     !REAL, INTENT(IN), DIMENSION(IXRT,JXRT)	:: SOXRT
@@ -237,14 +268,11 @@ subroutine ov_rtng( &
     !REAL, INTENT(IN), DIMENSION(IXRT,JXRT,9):: dist
     !REAL, INTENT(INOUT), DIMENSION(IXRT,JXRT)	:: RETDEPRT
     !REAL, INTENT(IN), DIMENSION(IXRT,JXRT)	:: OVROUGHRT
-
     !REAL, INTENT(OUT), DIMENSION(IXRT,JXRT)	:: SFCHEADSUBRT
     !REAL, INTENT(OUT), DIMENSION(IXRT,JXRT)	:: DHRT
-
     !REAL, INTENT(INOUT), DIMENSION(IXRT,JXRT) :: QSTRMVOLRT
     !REAL, INTENT(INOUT), DIMENSION(IXRT,JXRT) :: LAKE_INFLORT
     !REAL, INTENT(INOUT), DIMENSION(IXRT,JXRT) :: QBDRYRT
-    REAL, INTENT(INOUT), DIMENSION(IXRT,JXRT) :: q_sfcflx_x,q_sfcflx_y
     !REAL, INTENT(INOUT)     :: QSTRMVOLTRT,QBDRYTRT,LAKE_INFLOTRT
     !REAL, INTENT(IN), DIMENSION(IXRT,JXRT,8)  :: SO8RT
 
@@ -255,8 +283,6 @@ subroutine ov_rtng( &
     REAL, DIMENSION(IXRT,JXRT)	:: INFXS_FRAC
     REAL	:: DT_FRAC,SUM_INFXS,sum_head
     !INTEGER SO8RT_D(IXRT,JXRT,3), rt_option
-
-
 
 
     !DJG ----------------------------------------------------------------------
@@ -270,6 +296,7 @@ subroutine ov_rtng( &
 #ifdef HYDRO_D
     write(6,*) "OV_RTNG  DT_FRAC, DT, DTRT_TER",DT_FRAC, DT, DTRT_TER
     write(6,*) "IXRT, JXRT = ",ixrt,jxrt
+!   write(6,*) "ELRT, CHNET = ",elrt(1,1), ch_netlnk(1,1)
 #endif
 
     !DJG NOTE: Applying all infiltration excess water at once then routing
@@ -332,7 +359,7 @@ subroutine ov_rtng( &
                     !	     RETDEPRT(I,J) = 10.0    !DJG TEMP HARDWIRE!!!!
 
                     ! AD hardwire to force channel retention depth to be 5mm.
-                    ovrt_data%properties%retention_depth(I,J) = 5.0
+! YATES COMMNENT OUT   ovrt_data%properties%retention_depth(I,J) = 5.0
 
                     IF (ovrt_data%control%surface_water_head_routing(I,J) .GT. ovrt_data%properties%retention_depth(I,J)) THEN
                         !!               QINFLO(CH_NET(I,J)=QINFLO(CH_NET(I,J)+SFCHEAD(I,J) - RETDEPRT(I,J)
@@ -345,7 +372,7 @@ subroutine ov_rtng( &
                         !     print *, "QSTRVOL GT 0", QSTRMVOLRT(I,J),I,J
                         !  endif
 
-                        ovrt_data%control%surface_water_head_routing(I,J) = ovrt_data%properties%retention_depth(I,J)
+! YATES COMMENT     ovrt_data%control%surface_water_head_routing(I,J) = ovrt_data%properties%retention_depth(I,J)
                     END IF
                 END IF
 
@@ -389,7 +416,7 @@ subroutine ov_rtng( &
                 ovrt_data%control%boundary_flux_total,    &
                 ovrt_data%properties%surface_slope, &
                 ovrt_data%properties%max_surface_slope_index, &
-                q_sfcflx_x, q_sfcflx_y)
+                q_sfcflx_x, q_sfcflx_y,elrt,hlink,nlinks,ch_netlnk,Bw,ChSSlp)
         else
             CALL ROUTE_OVERLAND2(DTRT_TER, &
                 ovrt_data%properties%distance_to_neighbor, &
@@ -427,7 +454,7 @@ END SUBROUTINE OV_RTNG
 SUBROUTINE ROUTE_OVERLAND1(dt,                                &
         &          gsize,h,qsfc,sox,soy,                                   &
         &     retent_dep,dist_rough,XX,YY,QBDRY,QBDRYT,SO8RT,SO8RT_D,      &
-        &     q_sfcflx_x,q_sfcflx_y)
+        &     q_sfcflx_x,q_sfcflx_y,elrt,hlink,nlinks,ch_netlnk,Bw,ChSSlp)
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !
     !  Subroutine to route excess rainfall over the watershed
@@ -449,6 +476,7 @@ SUBROUTINE ROUTE_OVERLAND1(dt,                                &
     use module_mpp_land, only: left_id,down_id,right_id, &
         up_id,mpp_land_com_real, my_id, mpp_land_com_real8,&
         mpp_land_sync
+    use module_RT_data, only:rt_domain
 #endif
 
     IMPLICIT NONE
@@ -461,7 +489,7 @@ SUBROUTINE ROUTE_OVERLAND1(dt,                                &
 
     !! Declare passed arrays
 
-    REAL, INTENT(INOUT), DIMENSION(XX,YY) :: h
+    REAL, INTENT(INOUT), DIMENSION(XX,YY) :: h  !depth of overland water (mm)
     REAL, INTENT(IN), DIMENSION(XX,YY) :: qsfc
     REAL, INTENT(IN), DIMENSION(XX,YY) :: sox
     REAL, INTENT(IN), DIMENSION(XX,YY) :: soy
@@ -470,10 +498,16 @@ SUBROUTINE ROUTE_OVERLAND1(dt,                                &
     REAL, INTENT(INOUT), DIMENSION(XX,YY) :: QBDRY
     REAL, INTENT(INOUT), DIMENSION(XX,YY) :: q_sfcflx_x, q_sfcflx_y
     REAL, INTENT(INOUT) :: QBDRYT
-    REAL, INTENT(IN), DIMENSION(XX,YY,8) :: SO8RT
+    REAL, INTENT(IN), DIMENSION(XX,YY,8) :: SO8RT   ! surface slope
     REAL*8, DIMENSION(XX,YY) :: QBDRY_tmp, DH
     REAL*8, DIMENSION(XX,YY) :: DH_tmp
 
+    REAL, INTENT(IN), DIMENSION(XX,YY)     :: elrt     ! terrain elevation (m)
+    INTEGER, INTENT(IN), DIMENSION(XX,YY)  :: ch_netlnk !channel elements
+    INTEGER, INTENT(IN)                    :: nlinks   ! number of channel nodes
+    REAL, INTENT(IN), DIMENSION(NLINKS)    :: Bw, ChSSlp ! bottomw width and side slope
+    REAL, INTENT(INOUT), DIMENSION(NLINKS) :: HLINK !elevation of water in channel (m)
+    
     !!! Declare Local Variables
 
     REAL :: dhdx,dhdy,alfax,alfay
@@ -499,46 +533,59 @@ SUBROUTINE ROUTE_OVERLAND1(dt,                                &
     !!! Loop to route water
     do j=2,YY-1
         do i=2,XX-1
+!           if (h(I,J).GT.retent_dep(I,J) .and. CH_NETLNK(I,J) .lt. 0) then
             if (h(I,J).GT.retent_dep(I,J)) then
-                IXX0 = SO8RT_D(i,j,1)
-                JYY0 = SO8RT_D(i,j,2)
-                index = SO8RT_D(i,j,3)
-                tmp_gsize = 1.0/gsize(i,j,index)
-                sfx = so8RT(i,j,index)-(h(IXX0,JYY0)-h(i,j))*0.001*tmp_gsize
+
+!! these 6 lines were original formulation
+!               hmax = h(i,j)*0.001  !Specify max head for mass flux limit...
+!               IXX0 = SO8RT_D(i,j,1)
+!               JYY0 = SO8RT_D(i,j,2)
+!               index = SO8RT_D(i,j,3)
+!               tmp_gsize = 1.0/gsize(i,j,index)
+!               sfx = so8RT(i,j,index)-(h(IXX0,JYY0)-h(i,j))*0.001*tmp_gsize
+
                 hmax = h(i,j)*0.001  !Specify max head for mass flux limit...
-                if(sfx .lt. 1E-20) then
-                    call GETMAX8DIR(IXX0,JYY0,I,J,H,RETENT_DEP,so8rt,gsize(i,j,:),sfx,XX,YY)
-                end if
-                if(IXX0 > 0) then  ! do the rest if the lowest grid can be found.
-                    if(sfx .lt. 1E-20) then
+!this if-endif  is also oroginal, now always run GETMAX8DIR to find steepest direction
+!               if(sfx .lt. 1E-20) then
+!               call GETMAX8DIR(IXX0,JYY0,I,J,H,RETENT_DEP,so8rt,gsize(i,j,:),sfx,XX,YY,index,elrt,ch_netlnk)
+                call GETMAX8DIR(IXX0,JYY0,I,J,H,RETENT_DEP,SO8RT,gsize(i,j,:),sfx,XX,YY,index, &
+                       elrt,ch_netlnk,hlink,ChSSlp,Bw,nlinks)
+
+                  if(gsize(i,j,index) .gt. 0) then 
+                    tmp_gsize = 1.0/gsize(i,j,index)
+                  else
 #ifdef HYDRO_D
-                        print*, "Message: sfx reset to 1E-20. sfx =",sfx
-                        print*, "i,j,index,IXX0,JYY0",i,j,index,IXX0,JYY0
-                        print*, "so8RT(i,j,index), h(IXX0,JYY0), h(i,j), gsize(i,j,index) ", &
-                            so8RT(i,j,index), h(IXX0,JYY0), h(i,j), gsize(i,j,index)
+                    print*, "Message: gsize 0 div overland =", gsize(i,j,index),index,H(i,j)
 #endif
-                        sfx = 1E-20
-                    end if
-                    alfax = sqrt(sfx) / dist_rough(i,j)
-                    hh=(h(i,j)-retent_dep(i,j)) * 0.001
-                    hh53=hh**(5./3.)
+                  end if
+!               end if
+
+                if(IXX0 > 0) then  ! do the rest if the lowest grid can be found.
+
+                  if(sfx .lt. 1E-20) then
+                   sfx = 1E-20
+                  end if
+
+                  alfax = sqrt(sfx) / dist_rough(i,j)
+                  hh=(h(i,j)-retent_dep(i,j)) * 0.001
+                  hh53=hh**(5./3.)
 
                     ! Calculate q-flux...
-                    qqsfc = alfax*hh53*dt * tmp_gsize
+                  qqsfc = alfax*hh53*dt * tmp_gsize
 
-                    !Courant check (simple mass limit on overland flow)...
-                    if (qqsfc.ge.(hmax*dt*tmp_gsize)) qqsfc = hmax*dt*tmp_gsize
+                  !Courant check (simple mass limit on overland flow)...
+                  if (qqsfc.ge.(hmax*dt*tmp_gsize)) qqsfc = hmax*dt*tmp_gsize
 
-                    ! Accumulate directional fluxes on routing subgrid...
-                    if (IXX0.gt.i) then
+                  ! Accumulate directional fluxes on routing subgrid...
+                  if (IXX0.gt.i) then
                         q_sfcflx_x(I,J) = q_sfcflx_x(I,J) + qqsfc * &
                             (1.0 - 0.5 * (ABS(j-JYY0)))
-                    else if (IXX0.lt.i) then
+                  else if (IXX0.lt.i) then
                         q_sfcflx_x(I,J) = q_sfcflx_x(I,J) - 1.0 * &
                             qqsfc * (1.0 - 0.5 * (ABS(j-JYY0)))
-                    else
+                  else
                         q_sfcflx_x(I,J) = q_sfcflx_x(I,J) + 0.
-                    end if
+                  end if
                     if (JYY0.gt.j) then
                         q_sfcflx_y(I,J) = q_sfcflx_y(I,J) + qqsfc * &
                             (1.0 - 0.5 * (ABS(i-IXX0)))
@@ -555,10 +602,9 @@ SUBROUTINE ROUTE_OVERLAND1(dt,                                &
                     tmp_adjust=qqsfc*1000
                     if((h(i,j) - tmp_adjust) <0 )  then
 #ifdef HYDRO_D
-                        print*, "Error Warning: surface head is negative:  ",i,j,ixx0,jyy0, &
-                            h(i,j) - tmp_adjust
+                    print*, "Warning: neg srfhead (sfx,h,dr):",sfx,h(i,j),qqsfc
 #endif
-                        tmp_adjust = h(i,j)
+                      tmp_adjust = h(i,j)
                     end if
                     DH(i,j) = DH(i,j)-tmp_adjust
                     DH_tmp(ixx0,jyy0) = DH_tmp(ixx0,jyy0) + tmp_adjust
@@ -583,7 +629,19 @@ SUBROUTINE ROUTE_OVERLAND1(dt,                                &
                         end if
                     end if
                     !! End loop to route sfc water
-                end if
+
+#ifdef HYDRO_D
+!                   if(i .eq. 76 .and. j .eq. 50) then
+!                     write(6,*) "ho0,ho1,sfx,tadj", h(IXX0,JYY0),h(i,j),sfx,tmp_adjust
+!                     write(6,*) "ch", CH_NETLNK(i,j),HLINK(CH_NETLNK(i,j))
+!                   endif
+#endif
+
+                end if  ! if lowest grid found IXX0
+
+!! update the depth of water in the channel by adding the increment on its overland gridcell
+            if(CH_NETLNK(I,J) .gt.0) HLINK(CH_NETLNK(I,J)) = HLINK(CH_NETLNK(I,J)) + H(I,J)/1000.
+
         end do
     end do
 

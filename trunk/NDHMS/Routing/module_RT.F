@@ -1146,6 +1146,11 @@ subroutine LandRT_ini(did)
 
            rt_domain(did)%overland%properties%surface_slope(i,j,8) = &
                 (rt_domain(did)%ELRT(i,j)-rt_domain(did)%ELRT(i-1,j+1))/rt_domain(did)%overland%properties%distance_to_neighbor(i,j,8)
+
+!           write(6,*) "DAMN SLP8",rt_domain(did)%overland%properties%surface_slope(i,j,8), &
+!                rt_domain(did)%ELRT(i,j),rt_domain(did)%ELRT(i-1,j+1),rt_domain(did)%overland%properties%distance_to_neighbor(i,j,8)
+
+
            if(rt_domain(did)%overland%properties%surface_slope(i,j,8) .gt. Vmax ) then
               rt_domain(did)%overland%properties%max_surface_slope_index(i,j,1) = i - 1
               rt_domain(did)%overland%properties%max_surface_slope_index(i,j,2) = j + 1

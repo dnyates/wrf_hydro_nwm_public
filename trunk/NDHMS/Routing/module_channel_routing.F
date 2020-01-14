@@ -68,8 +68,7 @@ end function MUSKING
 ! ------------------------------------------------
 !   FUNCTION Diffusive wave
 ! ------------------------------------------------
-real function DIFFUSION(nod,z1,z20,h1,h2,dx,n, &
-     Bw, Cs)
+real function DIFFUSION(nod,z1,z20,h1,h2,dx,n,Bw,Cs)
 implicit none
 !-- channel geometry and characteristics
 real    :: Bw         !-bottom width (meters)
@@ -78,22 +77,22 @@ real    :: dx         !-channel lngth (m)
 real,intent(in)    :: n          !-mannings coefficient
 real    :: R          !-Hydraulic radius
 real    :: AREA       !- wetted area
-real    :: h1,h2      !-tmp height variables
-real    :: z1,z2      !-z1 is 'from', z2 is 'to' elevations
+real    :: h1,h2      !-tmp height variables, h1 upstream, h2 downstream (m)
+real    :: z1,z2      !-z1 is 'from', z2 is 'to' elevations (m)
 real    :: z          !-channel side distance
 real    :: w          !-upstream weight
 real    :: Ku,Kd      !-upstream and downstream conveyance
 real    :: Kf         !-final face conveyance
 real    :: Sf         !-friction slope
 real    :: sgn        !-0 or 1
-integer :: nod         !- node
+integer :: nod        !- node
 real ::  z20, dzx
 
 ! added by Wei Yu for bad data.
 
 dzx = (z1 - z20)/dx
-if(dzx .lt. 0.002) then
-   z2 = z1 - dx*0.002
+if(dzx .lt. 0.001) then
+   z2 = z1 - dx*0.001
 else
    z2 = z20
 endif
@@ -139,8 +138,10 @@ Kd = (1.0/n)*(R**(2.0/3.0))*AREA     !-- convenyance
 Kf =  (1.0-w)*Kd + w*Ku      !-- conveyance
 DIFFUSION = Kf * sqrt(abs(Sf))*sgn
 
-
-100 format('z1,z2,h1,h2,kf,Dif, Sf, sgn  ',f8.3,2x,f8.3,2x,f8.4,2x,f8.4,2x,f8.3,2x,f8.3,2x,f8.3,2x,f8.0)
+!if(nod .eq. 156) then 
+!write(6,100) h1,h2,DIFFUSION,Sf
+!endif
+100 format('h1,h2,Dif,Sf ',f10.2,2x,f10.2,2x,f10.2,2x,f10.5)
 
 end function DIFFUSION
 ! ----------------------------------------------------------------
@@ -562,8 +563,8 @@ END SUBROUTINE SUBMUSKINGCUNGE
         REAL, INTENT(IN), DIMENSION(NLINKS)       :: Tw_CC, n_CC  !properties of compund channel
 
         REAL                                      :: Km, X
-        REAL , INTENT(INOUT), DIMENSION(:,:) :: QLINK
-        REAL ,  DIMENSION(NLINKS,2) :: tmpQLINK
+        REAL , INTENT(INOUT), DIMENSION(:,:)      :: QLINK
+        REAL ,  DIMENSION(NLINKS,2)               :: tmpQLINK
         REAL , INTENT(INOUT), DIMENSION(NLINKS)   :: HLINK
         REAL, dimension(NLINKS), intent(inout)    :: QLateral !--lateral flow
         REAL, INTENT(IN)                          :: DT    !-- model timestep
@@ -596,11 +597,11 @@ END SUBROUTINE SUBMUSKINGCUNGE
         REAL, INTENT(INOUT), DIMENSION(NLAKES)    :: QLAKEO   !-- outflow from lake used in diffusion scheme
         INTEGER, INTENT(IN), DIMENSION(NLINKS)    :: LAKENODE !-- outflow from lake used in diffusion scheme
         INTEGER, INTENT(IN), DIMENSION(NLINKS)    :: LINKID   !--  id of channel elements for linked scheme
-        !REAL, DIMENSION(NLINKS)                   :: QLateral !--lateral flow
-        REAL, DIMENSION(NLINKS)                   :: QSUM     !--mass bal of node
-        REAL*8, DIMENSION(NLINKS)                   :: QSUM8     !--mass bal of node
+        !REAL, DIMENSION(NLINKS)                  :: QLateral !--lateral flow
+        REAL, DIMENSION(NLINKS)                   :: QSUM     !--mass bal of node net flux of water across cell in timestep (m^3/sec)
+!       REAL*8, DIMENSION(NLINKS)                 :: QSUM8     !--mass bal of node
         REAL, DIMENSION(NLAKES)                   :: QLLAKE   !-- lateral inflow to lake in diffusion scheme
-        REAL*8, DIMENSION(NLAKES)                   :: QLLAKE8   !-- lateral inflow to lake in diffusion scheme
+        REAL*8, DIMENSION(NLAKES)                 :: QLLAKE8   !-- lateral inflow to lake in diffusion scheme
 
 !-- Local Variables
         INTEGER                     :: i,j,k,t,m,jj,kk,KRT,node
@@ -707,33 +708,6 @@ END SUBROUTINE SUBMUSKINGCUNGE
 
    do nt = 1, nsteps
 
-!Per Yates, this check is not needed. Commenting out for now.
-!----------  route order 1 reaches which have no upstream inflow
-!        do k=1, NLINKSL
-!           if (ORDER(k) .eq. 1) then  !-- first order stream has no headflow
-
-
-!              if(TYPEL(k) .eq. 1) then    !-- level pool route of reservoir
-!                  !CALL LEVELPOOL(1,0.0, 0.0, qd, QLINK(k,2), QLateral(k), &
-!                  ! DT, RESHT(k), HRZAREA(k), LAKEMAXH(k), &
-!                  ! WEIRC(k), WEIRL(k), ORIFICEE(i), ORIFICEC(k), ORIFICEA(k) )
-!              elseif (channel_option .eq. 1) then
-!                   Km  = MUSK(k)
-!                   X   = MUSX(k)
-!                   QLINK(k,2) = MUSKING(k,0.0, QLateral(k), QLINK(k,1), DTRT_CH, Km, X) !--current outflow
-!              elseif (channel_option .eq. 2) then !-- upstream is assumed constant initial condition
-
-!                   call SUBMUSKINGCUNGE(QLINK(k,2), velocity(k), k,  &
-!                    0.0,0.0, QLINK(k,1), QLateral(k),   DTRT_CH, So(k), &
-!                    CHANLEN(k), MannN(k), ChSSlp(k), Bw(k), Tw(k) )
-
-!              else
-!                  print *, "FATAL ERROR: No channel option selected"
-!                  call hydro_stop("In drive_CHANNEL() -No channel option selected ")
-!              endif
-!           endif
-!        end do
-
 #ifdef MPP_LAND
        gQLINK = 0.000
        call gbcastReal2(toNodeInd,nToNodeInd,QLINK(1:NLINKSL,2), NLINKSL, gQLINK(:,2))
@@ -754,12 +728,6 @@ END SUBROUTINE SUBMUSKINGCUNGE
 !yw                  if (LINKID(k) .eq. m) then
                     Quc = Quc + gQLINK(m,2)  !--accum of upstream inflow of current timestep (2)
                     Qup = Qup + gQLINK(m,1)  !--accum of upstream inflow of previous timestep (1)
-
-                      !     if(LINKID(k) .eq. 3259 .or. LINKID(k) .eq. 3316 .or. LINKID(k) .eq. 3219) then
-                      !       write(6,*) "id,Uc,Up",LINKID(k),Quc,Qup
-                      !       call flush(6)
-                      !     endif
-
 !yw                  endif
                 end do ! do i
 
@@ -819,8 +787,6 @@ END SUBROUTINE SUBMUSKINGCUNGE
           print *, "END OF ALL REACHES...",KRT,DT_STEPS
 #endif
 
-!    END DO !-- krt timestep for muksingumcunge routing
-
    elseif(channel_option .eq. 3) then   !--- route using the diffusion scheme on nodes not links
 
 #ifdef MPP_LAND
@@ -829,7 +795,7 @@ END SUBROUTINE SUBMUSKINGCUNGE
 #endif
 
          KRT = 0                  !-- initialize the time counter
-         minDTCT = 0.01           ! define minimum routing sub-timestep (s), simulation will end with smaller timestep
+         minDTCT = 0.01           !define minimum routing sub-timestep (s), simulation will end with smaller timestep
          DTCT = min(max(DTCT*2.0, minDTCT),DTRT_CH)
 
          HLINKTMP = HLINK         !-- temporary storage of the water elevations (m)
@@ -839,12 +805,12 @@ END SUBROUTINE SUBMUSKINGCUNGE
 !        call check_channel(77,HLINKTMP,1,nlinks)
 !        call MPP_CHANNEL_COM_REAL(Link_location,ixrt,jxrt,ZELEV,NLINKS,99)
  crnt:   DO                      !-- loop on the courant condition
-          QSUM     = 0.              !-- initialize the total flow out of each cell to zero
-          QSUM8     = 0.              !-- initialize the total flow out of each cell to zero
+          QSUM     = 0.              !-- initialize the total(net) flux through cell  (m^3/sec)
+!         QSUM8    = 0.              !-- initialize the total flow out of each cell to zero (WHY nEEDED?)
           QLAKEI8  = 0.              !-- set the lake inflow as zero
           QLAKEI   = 0.              !-- set the lake inflow as zero
           QLLAKE   = 0.              !-- initialize each lake's lateral inflow to zero
-          QLLAKE8   = 0.              !-- initialize each lake's lateral inflow to zero
+          QLLAKE8  = 0.              !-- initialize each lake's lateral inflow to zero
           DT_STEPS = INT(DT/DTCT)   !-- fix the timestep
           QLateral = 0.
 !DJG GW-chan coupling variables...
@@ -854,7 +820,7 @@ END SUBROUTINE SUBMUSKINGCUNGE
           end if
 
 !         ZWATTBLRT=1.0   !--HARDWIRE, remove this and pass in from subsfc/gw routing routines...
-
+!         print *, "DT,DTCT,DT_STEPS", DT,DTCT,DT_STEPS
 
 !-- vectorize
 !---------------------
@@ -871,6 +837,7 @@ END SUBROUTINE SUBMUSKINGCUNGE
            endif
 
 
+!!! First, compute lateral fluxes to each channel grid and lake from surface and groundwater
 
 nodeType:if((CH_NETRT(CHANXI(i), CHANYJ(i) ) .eq. 0) .and. &
               (LAKE_MSKRT(CHANXI(i),CHANYJ(i)) .lt.0) ) then !--a reg. node
@@ -966,9 +933,9 @@ gwOption:   if(gwBaseSwCRT == 3) then
     endif
 #endif
 
-          !-- compute conveyances, with known depths (just assign to QLINK(,1)
-          !--QLINK(,2) will not be used), QLINK is the flow across the node face
-          !-- units should be m3/second.. consistent with QL (lateral flow)
+!-- 2nd, compute the convenyances for the given depths depths (just assign to QLINK(,1)
+!--QLINK(,2) will not be used), QLINK is the flow across the node face
+!-- units should be m3/second.. consistent with QL (lateral flow)
 
 #ifdef MPP_LAND
          DO iyw = 1,yw_MPP_NLINKS
@@ -976,55 +943,91 @@ gwOption:   if(gwBaseSwCRT == 3) then
 #else
            DO i = 1,NLINKS
 #endif
-           if (TYPEL(i) .eq. 0 .AND. HLINKTMP(FROM_NODE(i)) .gt. RETDEP_CHAN) then
-               if(from_node(i) .ne. to_node(i) .and. (to_node(i) .gt. 0) .and.(from_node(i) .gt. 0) ) &  ! added by Wei Yu
-                   QLINK(i,1)=DIFFUSION(i,ZELEV(FROM_NODE(i)),ZELEV(TO_NODE(i)), &
-                     HLINKTMP(FROM_NODE(i)),HLINKTMP(TO_NODE(i)), &
-                     CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
-            else !--  we are just computing critical depth for outflow points
-               QLINK(i,1) =0.
-            endif
-          ENDDO
+!           if (TYPEL(i) .eq. 0 .AND. HLINKTMP(FROM_NODE(i)) .gt. RETDEP_CHAN) then
+!              if(from_node(i) .ne. to_node(i) .and. (to_node(i) .gt. 0) .and.(from_node(i) .gt. 0) ) &  ! added by Wei Yu
+            if (TYPEL(i) .eq. 0 .AND. HLINKTMP(i) .gt. RETDEP_CHAN) then
+               if(i .ne. to_node(i) .and. (to_node(i) .gt. 0) .and.(i .gt. 0) ) &  ! added by Wei Yu
 
+!                  QLINK(i,1)=DIFFUSION(i,ZELEV(FROM_NODE(i)),ZELEV(TO_NODE(i)), &
+!                    HLINKTMP(FROM_NODE(i)),HLINKTMP(TO_NODE(i)), &
+!                    CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+
+                   QLINK(i,1)=DIFFUSION(i,ZELEV(i),ZELEV(TO_NODE(i)), &
+                     HLINKTMP(i),HLINKTMP(TO_NODE(i)), &
+                     CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+
+            else !--  we are just computing critical depth for outflow points
+
+!                  QLINK(i,1)=DIFFUSION(i,ZELEV(FROM_NODE(i)),(ZELEV(FROM_NODE(i))-(So(i)*CHANLEN(i))), &
+!                    HLINKTMP(FROM_NODE(i)),HLINKTMP(i), &
+!                    CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+
+                   QLINK(i,1)=DIFFUSION(i,ZELEV(i),(ZELEV(i)-(So(i)*CHANLEN(i))), &
+                     HLINKTMP(i),HLINKTMP(i), &
+                     CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+
+            endif
+           ENDDO
+
+!! next compute the flux across the node  that is the sum of the inflows from upstream nodes and the lateral flux
 #ifdef MPP_LAND
     call MPP_CHANNEL_COM_REAL(Link_location,ixrt,jxrt,QLINK(:,1),NLINKS,99)
 #endif
-
-
           !-- compute total flow across face, into node
 #ifdef MPP_LAND
          DO iyw = 1,yw_mpp_nlinks
          i = nlinks_index(iyw)
 #else
-          DO i = 1,NLINKS                                                 !-- inflow to node across each face
+         DO i = 1,NLINKS                                             !-- inflow to node across each face
 #endif
-           if(TYPEL(i) .eq. 0) then                                       !-- only regular nodes have to attribute
-              QSUM8(TO_NODE(i)) = QSUM8(TO_NODE(i)) + QLINK(i,1)
+           if(TYPEL(i) .eq. 0) then                                   !-- only regular nodes have to attribute
+!             QSUM8(TO_NODE(i)) = QSUM8(TO_NODE(i)) + QLINK(i,1)
+!!!           QSUM(TO_NODE(i)) = QSUM(TO_NODE(i)) + QLINK(i,1)   ! flow into node
+              QSUM(TO_NODE(i)) = QSUM(TO_NODE(i)) + (QLINK(i,1)+Qlateral(i))   ! flow into node
+              QSUM(i)          = QSUM(i) - QLINK(i,1)   ! flow  out of node
+
+!            if(i .eq. 156) then
+!              write(6,*) "BEFORE MPP TO", i,TO_NODE(i),QSUM(i),QSUM(TO_NODE(i))
+!              write(6,*) "BEFORE CVOLTMP", i, CVOLTMP(i)
+!            endif
+
+           elseif(TYPEL(i) .eq. 1) then                               !-- boundary node
+!             QSUM8(i) = QSUM8(i) + QLINK(i,1)
+              QSUM(i) = QSUM(i) + (QLINK(i,1) + QLateral(i))
            endif
-          END DO
+         END DO
 
 #ifdef MPP_LAND
-    call MPP_CHANNEL_COM_REAL8(Link_location,ixrt,jxrt,qsum8,NLINKS,0)
-#endif
-    qsum = qsum8
-
-
-
-#ifdef MPP_LAND
-         do iyw = 1,yw_mpp_nlinks
-         i = nlinks_index(iyw)
-#else
-         do i = 1,NLINKS                                                 !-- outflow from node across each face
-#endif
-            QSUM(FROM_NODE(i)) = QSUM(FROM_NODE(i)) - QLINK(i,1)
-         end do
-#ifdef MPP_LAND
+!   call MPP_CHANNEL_COM_REAL8(Link_location,ixrt,jxrt,qsum8,NLINKS,0)
     call MPP_CHANNEL_COM_REAL(Link_location,ixrt,jxrt,qsum,NLINKS,99)
 #endif
+!   qsum = qsum8
 
+!#ifdef MPP_LAND
+!          do iyw = 1,yw_mpp_nlinks
+!          i = nlinks_index(iyw)
+!#else
+!          do i = 1,NLINKS                                                 !-- outflow from node across each face
+!#endif
+!              if(QSUM(i).lt. 0.0 ) then
+!                write(6,*) "QSUM FLUX is neg", i,TO_NODE(i),QSUM(i),QSUM(TO_NODE(i))
+!              endif
+!         end do
+!!
+!#ifdef MPP_LAND
+!         do iyw = 1,yw_mpp_nlinks
+!         i = nlinks_index(iyw)
+!#else
+!         do i = 1,NLINKS                                                 !-- outflow from node across each face
+!#endif
+!!          QSUM(FROM_NODE(i)) = QSUM(FROM_NODE(i)) - QLINK(i,1)
+!           QSUM(i) = QSUM(i) - QLINK(i,1)
+!         end do
+!#ifdef MPP_LAND
+!    call MPP_CHANNEL_COM_REAL(Link_location,ixrt,jxrt,qsum,NLINKS,99)
+!#endif
 
          flag = 99
-
 
 #ifdef MPP_LAND
          do iyw = 1,yw_MPP_NLINKS
@@ -1033,38 +1036,29 @@ gwOption:   if(gwBaseSwCRT == 3) then
          do i = 1, NLINKS                                                !--- compute volume and depth at each node
 #endif
 
-           if( TYPEL(i).eq.0 .and. CVOLTMP(i) .ge. 0.001 .and.(CVOLTMP(i)-QSUM(i)*DTCT)/CVOLTMP(i) .le. -0.01 ) then
+! QSUM is netflux of cell positive is into, negative is out, i think this sign was wrong?
+!          if(TYPEL(i) .le. 1 .and. CVOLTMP(i) .ge. 0.1 .and.(CVOLTMP(i)-QSUM(i)*DTCT)/CVOLTMP(i) .le. -0.01 ) then
+           if(TYPEL(i) .le. 1 .and. CVOLTMP(i) .ge. 0.1 .and.(CVOLTMP(i) + (QSUM(i)*DTCT))/CVOLTMP(i) .le. -0.01 ) then
             flag = -99
 #ifdef HYDRO_D
-            write(6,*) "******* start diag ***************"
-            write(6,*) "Unstable at node ",i, "i=",CHANXI(i),"j=",CHANYJ(i)
-            write(6,*) "Unstatble at node ",i, "lat=",latval(CHANXI(i),CHANYJ(i)), "lon=",lonval(CHANXI(i),CHANYJ(i))
-            write(6,*) "TYPEL, CVOLTMP, QSUM, QSUM*DTCT",TYPEL(i), CVOLTMP(i), QSUM(i), QSUM(i)*DTCT
-            write(6,*) "qsubrt, qstrmvolrt,qlink",QSUBRT(CHANXI(i),CHANYJ(i)),QSTRMVOLRT(CHANXI(i),CHANYJ(i)),qlink(i,1),qlink(i,2)
-!              write(6,*) "current nodes, z, h", ZELEV(FROM_NODE(i)),HLINKTMP(FROM_NODE(i))
-!           if(TO_NODE(i) .gt. 0) then
-!              write(6,*) "to nodes, z, h", ZELEV(TO_NODE(i)), HLINKTMP(TO_NODE(i))
-!           else
-!              write(6,*) "no to nodes   "
-!           endif
-               write(6,*) "CHANLEN(i), MannN(i), Bw(i), ChSSlp(i) ", CHANLEN(i), MannN(i), Bw(i), ChSSlp(i)
-            write(6,*) "*******end of  diag ***************"
+            write(6,*) "******* diag ***************"
+            write(6,*) "Unstable at node ",i, "i=",CHANXI(i),"j=",CHANYJ(i),"k=",KRT
+            write(6,*) "i,CVOL,QSUM,DTCT",i,CVOLTMP(i),QSUM(i),DTCT
+            write(6,*) "ERROR, QLINK",(CVOLTMP(i)-QSUM(i)*DTCT)/CVOLTMP(i),qlink(i,1)
+            write(6,*) ""
 #endif
 
             goto 999
-            endif
-          enddo
+           endif
+         enddo
 
 999 continue
 #ifdef MPP_LAND
         call mpp_same_int1(flag)
 #endif
 
-
-        if(flag < 0  .and. DTCT >0.1)   then
-
+        if(flag < 0  .and. DTCT > minDTCT)   then
              ! call smoth121(HLINK,nlinks,maxv_p,pnode,to_node)
-
              if(DTCT .gt. minDTCT) then                !-- timestep in seconds
               DTCT = max(DTCT/2 , minDTCT)             !-- 1/2 timestep
               KRT = 0                                  !-- restart counter
@@ -1074,7 +1068,7 @@ gwOption:   if(gwBaseSwCRT == 3) then
              else
               write(6,*) "Courant error with smallest routing timestep DTCT: ",DTCT
 !              call hydro_stop("drive_CHANNEL")
-              DTCT = 0.1
+              DTCT = minDTCT
               HLINKTMP = HLINK                          !-- set head and volume to start values of timestep
               CVOLTMP  = CVOL
               goto 998
@@ -1084,41 +1078,34 @@ gwOption:   if(gwBaseSwCRT == 3) then
 998 continue
 
 
+!!! finally update the water volume in channel at the given timestep
+
 #ifdef MPP_LAND
         do iyw = 1,yw_MPP_NLINKS
             i = nlinks_index(iyw)
 #else
         do i = 1, NLINKS                                                !--- compute volume and depth at each node
 #endif
+          if(TYPEL(i) .eq. 0 .or. TYPEL(i) .eq. 1) then                !--  regular channel grid point, compute volume
+!             CVOLTMP(i) = CVOLTMP(i) + (QSUM(i) + QLateral(i) )* DTCT  !lateral inflow is part of flux term now 
+              CVOLTMP(i) = CVOLTMP(i) + (QSUM(i) * DTCT)
 
-           if(TYPEL(i) .eq. 0) then                   !--  regular channel grid point, compute volume
-              CVOLTMP(i) = CVOLTMP(i) + (QSUM(i) + QLateral(i) )* DTCT
               if((CVOLTMP(i) .lt. 0) .and. (gwChanCondSw == 0)) then
 #ifdef HYDRO_D
-                print *, "WARNING! channel volume less than 0:i,CVOL,QSUM,QLat", &
-                               i, CVOLTMP(i),QSUM(i),QLateral(i),HLINK(i)
+!               print *, "WARNING! channel volume less than 0:i,CVOL,QSUM,QLat", &
+!                              i, CVOLTMP(i),QSUM(i),QLateral(i),HLINK(i)
+                print *, "WARNING! channel volume less than 0:i,CVOL,QSUM", &
+                               i, CVOLTMP(i),QSUM(i),HLINK(i)
 #endif
                 CVOLTMP(i) =0
               endif
-
-           elseif(TYPEL(i) .eq. 1) then               !-- pour point, critical depth downstream
-
-              if (QSUM(i)+QLateral(i) .lt. 0) then
-              else
-
-!DJG remove to have const. flux b.c....   CD(i) =CRITICALDEPTH(i,abs(QSUM(i)+QLateral(i)), Bw(i), 1./ChSSlp(i))
-                  CD(i) = HLINKTMP(i)  !This is a temp hardwire for flow depth for the pour point...
-              endif
-
-               ! change in volume is inflow, lateral flow, and outflow
-               !yw DIFFUSION(i,ZELEV(i),ZELEV(i)-(So(i)*DXRT),HLINKTMP(i), &
-                   CVOLTMP(i) = CVOLTMP(i) + (QSUM(i) + QLateral(i) - &
-                       DIFFUSION(i,ZELEV(i),ZELEV(i)-(So(i)*CHANLEN(i)),HLINKTMP(i), &
-                       CD(i),CHANLEN(i), MannN(i), Bw(i), ChSSlp(i)) ) * DTCT
           elseif (TYPEL(i) .eq. 2) then              !--- into a reservoir, assume critical depth
-              if ((QSUM(i)+QLateral(i) .lt. 0) .and. (gwChanCondSw == 0)) then
+!             if ((QSUM(i)+QLateral(i) .lt. 0) .and. (gwChanCondSw == 0)) then
+              if ((QSUM(i) .lt. 0) .and. (gwChanCondSw == 0)) then
+
 #ifdef HYDRO_D
-               print *, i, 'CrtDpth Qsum+QLat into lake< 0',QSUM(i), QLateral(i)
+!              print *, i, 'CrtDpth Qsum+QLat into lake< 0',QSUM(i), QLateral(i)
+               print *, i, 'CrtDpth Qsum+QLat into lake< 0',QSUM(i)
 #endif
              else
 !DJG remove to have const. flux b.c....    CD(i) =CRITICALDEPTH(i,abs(QSUM(i)+QLateral(i)), Bw(i), 1./ChSSlp(i))
@@ -1126,18 +1113,17 @@ gwOption:   if(gwBaseSwCRT == 3) then
              endif
 
               !-- compute volume in reach (m^3)
-                   CVOLTMP(i) = CVOLTMP(i) + (QSUM(i) + QLateral(i) - &
-                          DIFFUSION(i,ZELEV(i),ZELEV(i)-(So(i)*CHANLEN(i)),HLINKTMP(i), &
-                             CD(i) ,CHANLEN(i), MannN(i), Bw(i), ChSSlp(i)) ) * DTCT
+!             CVOLTMP(i) = CVOLTMP(i) + (QSUM(i) + QLateral(i) - &
+              CVOLTMP(i) = CVOLTMP(i) + (QSUM(i) - &
+                           DIFFUSION(i,ZELEV(i),ZELEV(i)-(So(i)*CHANLEN(i)),HLINKTMP(i), &
+                           CD(i) ,CHANLEN(i), MannN(i), Bw(i), ChSSlp(i)) ) * DTCT
           else
               print *, "FATAL ERROR: This node does not have a type.. error TYPEL =", TYPEL(i)
               call hydro_stop("In drive_CHANNEL() - error TYPEL")
           endif
 
-          if(TYPEL(i) == 0) then !-- regular channel node, finalize head and flow
+          if(TYPEL(i) .eq. 0 .or. TYPEL(i) .eq. 1) then !-- regular or boundary node, finalize head and flow
               HLINKTMP(i) = HEAD(i, CVOLTMP(i)/CHANLEN(i),Bw(i),1/ChSSlp(i))  !--updated depth
-          else
-              HLINKTMP(i) = CD(i)  !!!   CRITICALDEPTH(i,QSUM(i)+QLateral(i), Bw(i), 1./ChSSlp(i)) !--critical depth is head
           endif
 
           if(TO_NODE(i) .gt. 0) then
@@ -1205,30 +1191,47 @@ gwOption:   if(gwBaseSwCRT == 3) then
 #endif
 
 
-#ifdef MPP_LAND
-         do iyw = 1,yw_MPP_NLINKS
-            i = nlinks_index(iyw)
-#else
-         do i = 1, NLINKS                                                !--- compute volume and depth at each node
-#endif
-            if(TYPEL(i) == 0) then !-- regular channel node, finalize head and flow
-                   QLINK(i,1)=DIFFUSION(i,ZELEV(FROM_NODE(i)),ZELEV(TO_NODE(i)), &
-                      HLINKTMP(FROM_NODE(i)),HLINKTMP(TO_NODE(i)), &
-                      CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
-            endif
-         enddo
-
-#ifdef MPP_LAND
-          call MPP_CHANNEL_COM_REAL(Link_location,ixrt,jxrt,QLINK(:,1),NLINKS,99)
-#endif
+!!!! Don't think we need to compute fluxes again here?
+!+++++++++++++++++++++++
+!#ifdef MPP_LAND
+!         do iyw = 1,yw_MPP_NLINKS
+!            i = nlinks_index(iyw)
+!#else
+!         do i = 1, NLINKS        !--- compute  flux at each node
+!#endif
+!            if(TYPEL(i) == 0) then !-- regular channel node, finalize head and flow
+!!                  QLINK(i,1)=DIFFUSION(i,ZELEV(FROM_NODE(i)),ZELEV(TO_NODE(i)), &
+!!                     HLINKTMP(FROM_NODE(i)),HLINKTMP(TO_NODE(i)), &
+!!                     CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+!
+!                   QLINK(i,1)=DIFFUSION(i,ZELEV(i),ZELEV(TO_NODE(i)), &
+!                      HLINKTMP(i),HLINKTMP(TO_NODE(i)), &
+!                      CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+!
+!            elseif(TYPEL(i) == 1) then !--  boundary node
+!!                  QLINK(i,1)=DIFFUSION(i,ZELEV(FROM_NODE(i)),(ZELEV(FROM_NODE(i))-(So(i)*CHANLEN(i))), &
+!!                     HLINKTMP(FROM_NODE(i)),HLINKTMP(FROM_NODE(i)), &
+!!                     CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+!
+!                   QLINK(i,1)=DIFFUSION(i,ZELEV(i),(ZELEV(i)-(So(i)*CHANLEN(i))), &
+!                      HLINKTMP(i),HLINKTMP(i), &
+!                      CHANLEN(i), MannN(i), Bw(i), ChSSlp(i))
+!
+!            endif
+!         enddo
+!
+!#ifdef MPP_LAND
+!          call MPP_CHANNEL_COM_REAL(Link_location,ixrt,jxrt,QLINK(:,1),NLINKS,99)
+!#endif
+!---- do we need to compute the above fluxes? I don't think so
 
            KRT = KRT + 1                     !-- iterate on the timestep
            if(KRT .eq. DT_STEPS) exit crnt   !-- up to the maximum time in interval
 
           end do crnt   !--- DTCT timestep of DT_STEPS
 
-           HLINK = HLINKTMP                 !-- update head based on final solution in timestep
-           CVOL  = CVOLTMP                  !-- update volume
+          HLINK = HLINKTMP                 !-- update head based on final solution in timestep
+          CVOL  = CVOLTMP                  !-- update volume
         else                                !-- no channel option apparently selected
          print *, "FATAL ERROR: no channel option selected"
          call hydro_stop("In drive_CHANNEL() - no channel option selected")

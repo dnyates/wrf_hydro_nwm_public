@@ -129,6 +129,7 @@ module config_base
      logical :: compound_channel
      integer ::frxst_pts_out            ! ASCII point timeseries output at user specified points
      integer ::CHRTOUT_DOMAIN           ! Netcdf point timeseries output at all channel points
+     integer ::CHRTOUT_IDVSTN           ! Netcdf point timeseries output at all channel points in idv format
      integer ::CHRTOUT_GRID                ! Netcdf grid of channel streamflow values
      integer ::CHANOBS_DOMAIN             ! NetCDF point timeseries of output at forecast/gage points
      integer ::LSMOUT_DOMAIN              ! Netcdf grid of variables passed between LSM and routing components
@@ -257,6 +258,9 @@ contains
    endif
    if( (self%CHRTOUT_DOMAIN .lt. 0 ) .or. (self%CHRTOUT_DOMAIN .gt. 1) ) then
       call hydro_stop('hydro.namelist ERROR: Invalid CHRTOUT_DOMAIN specified')
+   endif
+   if( (self%CHRTOUT_IDVSTN .lt. 0 ) .or. (self%CHRTOUT_IDVSTN .gt. 1) ) then
+      call hydro_stop('hydro.namelist ERROR: Invalid CHRTOUT_IDVSTN specified')
    endif
    if( (self%CHANOBS_DOMAIN .lt. 0 ) .or. (self%CHANOBS_DOMAIN .gt. 1) ) then
       call hydro_stop('hydro.namelist ERROR: Invalid CHANOBS_DOMAIN specified')
@@ -467,6 +471,7 @@ contains
     integer :: i
 
     integer ::CHRTOUT_DOMAIN           ! Netcdf point timeseries output at all channel points
+    integer ::CHRTOUT_IDVSTN           ! Netcdf point timeseries output at all channel points in IDV format
     integer ::CHRTOUT_GRID                ! Netcdf grid of channel streamflow values
     integer ::LSMOUT_DOMAIN              ! Netcdf grid of variables passed between LSM and routing components
     integer ::RTOUT_DOMAIN                ! Netcdf grid of terrain routing variables on routing grid
@@ -513,7 +518,8 @@ contains
          reservoir_rfc_forecasts, reservoir_type_specified, route_direction_f,route_order_f,gwbasmskfil, &
          geo_finegrid_flnm, gwstrmfil,GW_RESTART,RSTRT_SWC,TERADJ_SOLAR, sys_cpl, &
          order_to_write , rst_typ, rst_bi_in, rst_bi_out, gwsoilcpl, &
-         CHRTOUT_DOMAIN,CHANOBS_DOMAIN,CHRTOUT_GRID,LSMOUT_DOMAIN,&
+!        CHRTOUT_DOMAIN,CHANOBS_DOMAIN,CHRTOUT_GRID,LSMOUT_DOMAIN,&
+         CHRTOUT_DOMAIN,CHRTOUT_IDVSTN, CHANOBS_DOMAIN,CHRTOUT_GRID,LSMOUT_DOMAIN,&
          RTOUT_DOMAIN, output_gw, outlake, &
          frxst_pts_out, udmap_file, UDMP_OPT, GWBUCKPARM_file, bucket_loss, &
          io_config_outputs, io_form_outputs, hydrotbl_f, t0OutputFlag, output_channelBucket_influx
@@ -658,6 +664,7 @@ contains
     endif
 
     nlst(did)%CHRTOUT_DOMAIN = CHRTOUT_DOMAIN
+    nlst(did)%CHRTOUT_IDVSTN = CHRTOUT_IDVSTN
     nlst(did)%CHANOBS_DOMAIN = CHANOBS_DOMAIN
     nlst(did)%output_gw      = output_gw
     nlst(did)%outlake      = outlake
@@ -894,7 +901,7 @@ contains
     noah_lsm%output_timestep         = -999
     noah_lsm%restart_frequency_hours = -999
 
-    write(*,*) 'Calling config noahlsm_offline'
+!   write(*,*) 'Calling config noahlsm_offline'
 
 #ifndef NCEP_WCOSS
     open(30, file="namelist.hrldas", form="FORMATTED")

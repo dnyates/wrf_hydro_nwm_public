@@ -27,7 +27,8 @@ module module_HYDRO_drv
 #else
    use module_HYDRO_io, only:  output_rt, output_chrt, output_chrt2, output_lakes
 #endif
-   use module_NWM_io, only: output_chrt_NWM, output_rt_NWM, output_lakes_NWM,&
+!  use module_NWM_io, only: output_chrt_NWM, output_rt_NWM, output_lakes_NWM,&
+   use module_NWM_io, only: output_chrt_NWM, output_chrt_IDV, output_rt_NWM, output_lakes_NWM,&
                             output_chrtout_grd_NWM, output_lsmOut_NWM, &
                             output_frxstPts, output_chanObs_NWM, output_gw_NWM
    use module_HYDRO_io, only: sub_output_gw, restart_out_nc, restart_in_nc,  &
@@ -361,6 +362,9 @@ module module_HYDRO_drv
                     ! Call National Water Model output routine for output on NHD forecast points.
                     if(nlst(did)%CHRTOUT_DOMAIN .ne. 0) then
                         call output_chrt_NWM(did)
+                    endif
+                    if(nlst(did)%CHRTOUT_IDVSTN .ne. 0) then
+                       call output_chrt_IDV(did)
                     endif
                     ! Call the subroutine to output frxstPts.
                     if(nlst(did)%frxst_pts_out .ne. 0) then
